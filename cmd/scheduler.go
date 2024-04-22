@@ -31,9 +31,9 @@ type Athlete struct {
 }
 
 type RefreshTokenResponse struct {
-	TokenType    int    `json:"token_type"`
+	TokenType    string `json:"token_type"`
 	AccessToken  string `json:"access_token"`
-	ExpiresAt    string `json:"expires_at"`
+	ExpiresAt    int    `json:"expires_at"`
 	RefreshToken string `json:"refresh_token"`
 }
 
@@ -72,7 +72,6 @@ func refreshToken() (RefreshTokenResponse, error) {
 		return RefreshTokenResponse{}, err
 	}
 
-	// Decode the response body into the struct
 	var userResp RefreshTokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&userResp); err != nil {
 		fmt.Println("Error decoding response: ", err)
@@ -82,12 +81,28 @@ func refreshToken() (RefreshTokenResponse, error) {
 	return userResp, nil
 }
 
-func fetchActivities() {
-	resp, err := http.Get("http://example.com/activities")
+func fetchActivities(refreshTokenResponse RefreshTokenResponse) {
+
+	clubID := os.Getenv("CLUB_ID")
+	reqURL := fmt.Sprintf("https://www.strava.com/api/v3/clubs/%s/activities", clubID)
+
+	token := refreshTokenResponse.TokenType + " " + refreshTokenResponse.AccessToken
+
+	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
-		fmt.Println("Error fetching activities:", err)
+		fmt.Println("Error creating request:", err)
 		return
 	}
+
+	req.Header.Set("Authorization", token)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error sending request: ", err)
+		return
+	}
+
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
@@ -102,10 +117,10 @@ func fetchActivities() {
 		return
 	}
 
-	// Process activities as needed
 	for _, activity := range activities {
 		fmt.Printf("Activity: %s, Type: %s, Athlete: %s %s\n", activity.Name, activity.Type, activity.Athlete.Firstname, activity.Athlete.Lastname)
 	}
+
 }
 
 // func main() {
@@ -134,8 +149,13 @@ func main() {
 	loadEnv()
 	fmt.Println("Test started, fetching activities from club...")
 
-	refreshToken()
+	token, err := refreshToken()
 
-	// fmt.Print("Client_secret")
-	// fmt.Print(os.Getenv("CLIENT_SECRET"))
+	if err != nil {
+		// Handle the error appropriately
+		fmt.Println("Error refreshing token:", err)
+		os.Exit(1) // Exit or handle the error as needed
+	}
+
+	fetchActivities(token)
 }
